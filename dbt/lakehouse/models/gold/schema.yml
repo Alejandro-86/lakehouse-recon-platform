@@ -1,0 +1,43 @@
+version: 2
+
+models:
+  - name: fct_transaction
+    description: "Star-schema fact: one row per ledger event, additive minor-unit measure."
+    columns:
+      - name: event_id
+        tests: [not_null, unique]
+      - name: account_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_account')
+              field: account_id
+      - name: currency_code
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_currency')
+              field: currency_code
+      - name: business_date
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: business_date
+      - name: signed_amount_minor
+        tests: [not_null]
+
+  - name: dim_account
+    columns:
+      - name: account_id
+        tests: [not_null, unique]
+
+  - name: dim_currency
+    columns:
+      - name: currency_code
+        tests: [not_null, unique]
+
+  - name: dim_date
+    columns:
+      - name: business_date
+        tests: [not_null, unique]

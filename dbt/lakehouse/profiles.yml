@@ -1,0 +1,15 @@
+lakehouse:
+  target: local
+  outputs:
+    local:
+      type: trino
+      method: none
+      user: "{{ env_var('LAKEHOUSE_TRINO_USER', 'lakehouse') }}"
+      host: "{{ env_var('LAKEHOUSE_TRINO_HOST', 'localhost') }}"
+      port: "{{ env_var('LAKEHOUSE_TRINO_PORT', '8080') | int }}"
+      catalog: "{{ env_var('LAKEHOUSE_TRINO_CATALOG', 'iceberg') }}"
+      schema: silver
+      threads: 4
+      http_scheme: http
+      session_properties:
+        query_max_run_time: 10m

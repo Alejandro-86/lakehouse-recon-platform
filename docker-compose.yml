@@ -1,0 +1,65 @@
+# Local stack: Iceberg REST catalog + Trino + Kafka.
+#
+# The warehouse is a shared docker volume rather than MinIO/S3. That keeps the
+# laptop setup to three services and removes an object-store dependency the demo
+# does not need — the REST catalog abstraction means pointing this at S3, GCS,
+# Glue or Nessie changes this file and nothing above it.
+services:
+  # The REST catalog image runs as root and the Trino image runs as uid 1000;
+  # without this the shared volume is root-owned and Trino cannot write metadata.
+  warehouse-init:
+    image: busybox:1.36
+    command: sh -c "mkdir -p /warehouse && chmod -R 0777 /warehouse"
+    volumes:
+      - warehouse:/warehouse
+
+  iceberg-rest:
+    image: tabulario/iceberg-rest:1.6.0
+    depends_on:
+      warehouse-init: { condition: service_completed_successfully }
+    environment:
+      CATALOG_WAREHOUSE: file:///warehouse
+      CATALOG_IO__IMPL: org.apache.iceberg.hadoop.HadoopFileIO
+    ports:
+      - "8181:8181"
+    volumes:
+      - warehouse:/warehouse
+
+  trino:
+    image: trinodb/trino:451
+    depends_on:
+      warehouse-init: { condition: service_completed_successfully }
+      iceberg-rest: { condition: service_started }
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/trino/catalog:/etc/trino/catalog:ro
+      - warehouse:/warehouse
+    healthcheck:
+      test: ["CMD", "trino", "--execute", "SELECT 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+
+  kafka:
+    image: apache/kafka:3.7.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+
+volumes:
+  warehouse:

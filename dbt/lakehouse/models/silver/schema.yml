@@ -1,0 +1,41 @@
+version: 2
+
+sources:
+  - name: bronze
+    schema: bronze
+    tables:
+      - name: transactions_raw
+        description: "Append-only landing zone. Retains at-least-once duplicates on purpose."
+
+models:
+  - name: silver_transactions
+    description: "Deduplicated, typed ledger events at one row per event_id."
+    columns:
+      - name: event_id
+        description: "Idempotency key from the source system."
+        tests: [not_null, unique]
+      - name: account_id
+        tests: [not_null]
+      - name: currency
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["GBP", "EUR", "USD", "PLN"]
+      - name: signed_amount_minor
+        description: "Integer minor units; debits negative, credits positive."
+        tests: [not_null]
+      - name: business_date
+        tests: [not_null]
+      - name: direction
+        tests:
+          - accepted_values:
+              values: ["debit", "credit"]
+
+  - name: silver_rejected_transactions
+    description: "Rows silver refused, with a named reason. Feeds break investigation."
+    columns:
+      - name: rejection_reason
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["missing_event_id", "missing_currency", "zero_amount", "unknown"]
